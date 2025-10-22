@@ -1065,18 +1065,14 @@
         let isGenerating = false;
         let debugErrors = [];
         let isAdmin = false;
-        let USE_PROXY = false; // 管理员登录后启用代理模式（隐藏API Key）
+        let USE_PROXY = true; // 始终使用代理模式（隐藏API Key，不在前端存储凭据）
         const PROXY_BASE = 'https://poemuniverse-proxy.vercel.app';
         
-        // API 配置 - 增强的持久化系统
+        // API 配置（直连模式已禁用），以下变量仅为兼容旧代码占位
         let API_KEY = '';
         let BASE_URL = '';
         let API_SESSION_VALID = false;
         let API_SESSION_EXPIRES = 0;
-        
-        // API会话管理
-        const API_SESSION_KEY = 'poetry-converter-api-session';
-        const API_SESSION_DURATION = 24 * 60 * 60 * 1000; // 24小时
 
         // 规范化 Base URL，确保包含 /v1，且移除多余斜杠
         function normalizeBaseUrl(url) {
@@ -1097,47 +1093,19 @@
 
         // API会话管理函数
         function saveApiSession(apiKey, baseUrl) {
-            const session = {
-                apiKey: apiKey,
-                baseUrl: baseUrl,
-                timestamp: Date.now(),
-                expires: Date.now() + API_SESSION_DURATION
-            };
-            localStorage.setItem(API_SESSION_KEY, JSON.stringify(session));
+            // 移除24小时持久化：不再写入 localStorage，仅内存使用（且默认走代理模式，不需要前端保存）
             API_KEY = apiKey;
             BASE_URL = baseUrl;
             API_SESSION_VALID = true;
-            API_SESSION_EXPIRES = session.expires;
+            API_SESSION_EXPIRES = 0;
         }
         
         function loadApiSession() {
-            try {
-                const sessionData = localStorage.getItem(API_SESSION_KEY);
-                if (!sessionData) return false;
-                
-                const session = JSON.parse(sessionData);
-                const now = Date.now();
-                
-                // 检查会话是否过期
-                if (now > session.expires) {
-                    clearApiSession();
-                    return false;
-                }
-                
-                API_KEY = session.apiKey;
-                BASE_URL = session.baseUrl;
-                API_SESSION_VALID = true;
-                API_SESSION_EXPIRES = session.expires;
-                return true;
-            } catch (error) {
-                console.error('加载API会话失败:', error);
-                clearApiSession();
-                return false;
-            }
+            // 不再从本地恢复任何会话
+            return false;
         }
         
         function clearApiSession() {
-            localStorage.removeItem(API_SESSION_KEY);
             API_KEY = '';
             BASE_URL = '';
             API_SESSION_VALID = false;
@@ -1149,13 +1117,7 @@
             return Date.now() < API_SESSION_EXPIRES;
         }
         
-        function checkApiSessionValidity() {
-            if (!isApiSessionValid()) {
-                console.log('API会话已过期，需要重新登录');
-                clearApiSession();
-                updateApiStatusDisplay();
-            }
-        }
+        function checkApiSessionValidity() { /* 已禁用 */ }
         
         function updateApiStatusDisplay() {
             const proxyStatus = document.getElementById('proxyStatus');
@@ -1198,10 +1160,7 @@
             loadHistory();
             migrateLegacyBaseUrl();
             
-            // 自动恢复API会话（仅直连模式）
-            if (loadApiSession()) {
-                console.log('API会话已恢复');
-            }
+            // 不再恢复会话，始终使用代理模式
             updateApiStatusDisplay();
             
             loadProxyConfig();
@@ -1229,8 +1188,7 @@
                 console.warn('warmup init error', e);
             }
 
-            // 定期检查API会话有效性
-            setInterval(checkApiSessionValidity, 5 * 60 * 1000); // 每5分钟检查一次
+            // 不再检查会话有效性
         });
         // 管理员：初始化与控制
         function setupAdminUI() {
