@@ -1211,6 +1211,18 @@
             // 生成按钮事件
             document.getElementById('generateBtn').addEventListener('click', generatePoetry);
             
+            // 预热 Vercel 函数：页面打开立即唤醒
+            try {
+                const warmupUrl = 'https://poemuniverse-proxy.vercel.app/api/proxy?warmup=1&ts=' + Date.now();
+                fetch(warmupUrl, { method: 'GET', cache: 'no-store', mode: 'cors', keepalive: true, headers: { 'x-warmup': '1' } }).catch(() => {});
+                // 页面打开期间，每5分钟自动 ping
+                setInterval(() => {
+                    fetch(warmupUrl, { method: 'GET', cache: 'no-store', mode: 'cors', keepalive: true, headers: { 'x-warmup': '1' } }).catch(() => {});
+                }, 5 * 60 * 1000);
+            } catch (e) {
+                console.warn('warmup init error', e);
+            }
+
             // 定期检查API会话有效性
             setInterval(checkApiSessionValidity, 5 * 60 * 1000); // 每5分钟检查一次
         });
