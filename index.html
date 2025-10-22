@@ -1065,6 +1065,8 @@
         let isGenerating = false;
         let debugErrors = [];
         let isAdmin = false;
+        let USE_PROXY = false; // 管理员登录后启用代理模式（隐藏API Key）
+        const PROXY_BASE = 'https://poemuniverse-proxy.vercel.app';
         
         // API 配置 - 增强的持久化系统
         let API_KEY = '';
@@ -1159,6 +1161,12 @@
             const proxyStatus = document.getElementById('proxyStatus');
             if (!proxyStatus) return;
             
+            if (USE_PROXY) {
+                proxyStatus.textContent = '已连接（代理模式）';
+                proxyStatus.className = 'proxy-status connected';
+                return;
+            }
+
             if (isApiSessionValid()) {
                 const remainingTime = Math.floor((API_SESSION_EXPIRES - Date.now()) / (60 * 60 * 1000));
                 proxyStatus.textContent = `已登录 (剩余${remainingTime}小时)`;
@@ -1190,13 +1198,11 @@
             loadHistory();
             migrateLegacyBaseUrl();
             
-            // 自动恢复API会话
+            // 自动恢复API会话（仅直连模式）
             if (loadApiSession()) {
                 console.log('API会话已恢复');
-                updateApiStatusDisplay();
-            } else {
-                console.log('未找到有效的API会话');
             }
+            updateApiStatusDisplay();
             
             loadProxyConfig();
             createOrbits();
@@ -1241,7 +1247,7 @@
             adminBtn.addEventListener('click', () => {
                 adminPanel.classList.toggle('hidden');
                 msg.textContent = isAdmin ? '已登录，可选择登出' : '';
-                if (isAdmin) {
+            if (isAdmin) {
                     // 切换为登出
                     loginBtn.textContent = '登出';
                 } else {
@@ -1260,15 +1266,20 @@
                     isAdmin = false;
                     localStorage.removeItem('pc-is-admin');
                     msg.textContent = '已登出';
+                    USE_PROXY = false;
+                    updateApiStatusDisplay();
                     updateAdminVisibility();
                     return;
                 }
                 const u = (document.getElementById('adminUser').value || '').trim();
                 const p = (document.getElementById('adminPass').value || '').trim();
-                if (u === 'Lam' && p === 'kee0206happy') {
+                if (u === 'Lam' && p === '222') {
                     isAdmin = true;
                     localStorage.setItem('pc-is-admin', '1');
                     msg.textContent = '登录成功';
+                    // 管理员登录后启用代理模式：前端不再需要 API Key
+                    USE_PROXY = true;
+                    updateApiStatusDisplay();
                     updateAdminVisibility();
                 } else {
                     msg.textContent = '用户名或密码错误';
@@ -1403,31 +1414,39 @@
         // 使用代理服务器生成诗歌
         async function generatePoem(prompt) {
             // 检查API会话是否有效
-            if (!isApiSessionValid()) {
-                throw new Error('API会话已过期，请重新配置API Key和Base URL');
-            }
-
-            if (!API_KEY || !BASE_URL) {
-                throw new Error('请先配置API Key和Base URL');
+            if (!USE_PROXY) {
+                if (!isApiSessionValid()) {
+                    throw new Error('API会话已过期，请重新配置API Key和Base URL');
+                }
+                if (!API_KEY || !BASE_URL) {
+                    throw new Error('请先配置API Key和Base URL');
+                }
             }
 
             
 
             try {
-                const base = normalizeBaseUrl(BASE_URL);
-                // 先进行 /models 探测，验证网关 JSON 可用
-                const modelsUrl = `${base}/models`;
-                const modelsResp = await fetch(modelsUrl, {
-                    method: 'GET',
-                    headers: { 'Authorization': `Bearer ${API_KEY}` }
-                });
-                const modelsCt = modelsResp.headers.get('content-type') || '';
-                if (!modelsResp.ok || !modelsCt.includes('application/json')) {
-                    const text = await modelsResp.text();
-                    throw new Error(`网关 /models 探测失败，收到 ${modelsResp.status} ${modelsResp.statusText}，Content-Type: ${modelsCt}.\n请确认 Base URL 是否为 https://api.moonshot.cn/v1。\n片段: ${text.substring(0, 500)}`);
+                let apiUrl = '';
+                let headers = { "Content-Type": "application/json" };
+                if (USE_PROXY) {
+                    // 通过代理调用，后端持有密钥
+                    apiUrl = `${PROXY_BASE}/api/proxy`;
+                } else {
+                    const base = normalizeBaseUrl(BASE_URL);
+                    // 先进行 /models 探测，验证网关 JSON 可用
+                    const modelsUrl = `${base}/models`;
+                    const modelsResp = await fetch(modelsUrl, {
+                        method: 'GET',
+                        headers: { 'Authorization': `Bearer ${API_KEY}` }
+                    });
+                    const modelsCt = modelsResp.headers.get('content-type') || '';
+                    if (!modelsResp.ok || !modelsCt.includes('application/json')) {
+                        const text = await modelsResp.text();
+                        throw new Error(`网关 /models 探测失败，收到 ${modelsResp.status} ${modelsResp.statusText}，Content-Type: ${modelsCt}.\n请确认 Base URL 是否为 https://api.moonshot.cn/v1。\n片段: ${text.substring(0, 500)}`);
+                    }
+                    apiUrl = `${base}/chat/completions`;
+                    headers["Authorization"] = `Bearer ${API_KEY}`;
                 }
-
-                const apiUrl = `${base}/chat/completions`;
                 const requestBody = {
                     model: "moonshot-v1-8k",
                     messages: [
@@ -1447,12 +1466,6 @@
                     frequency_penalty: 0.2
                 };
                 
-                const headers = {
-                    "Content-Type": "application/json"
-                };
-                
-                headers["Authorization"] = `Bearer ${API_KEY}`;
-
                 const response = await fetch(apiUrl, {
                     method: "POST",
                     headers: headers,

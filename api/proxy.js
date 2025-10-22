@@ -25,6 +25,7 @@ export default async function handler(req, res) {
   }
 
   const baseUrl = (process.env.MOONSHOT_BASE_URL || 'https://api.moonshot.cn/v1').replace(/\/$/, '');
+  // 为了安全，不在前端暴露 token。建议将 token 配置在 Vercel 环境变量 MOONSHOT_API_KEY。
   const apiKey = process.env.MOONSHOT_API_KEY || '';
 
   try {
