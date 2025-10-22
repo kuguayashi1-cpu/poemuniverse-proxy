@@ -1,5 +1,8 @@
 {
   "name": "poemuniverse-proxy",
   "version": "1.0.0",
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "start": "vercel dev"
+  }
 }
